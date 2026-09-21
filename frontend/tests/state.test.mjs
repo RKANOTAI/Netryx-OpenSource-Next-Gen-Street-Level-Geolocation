@@ -3,6 +3,12 @@ import assert from "node:assert/strict";
 
 import { initialState, reduce } from "../js/state.js";
 
+test("de nouvelles photos nécessitent une nouvelle confirmation extérieure", () => {
+  const reviewed = { ...initialState, reviewedExterior: true };
+  const next = reduce(reviewed, { type: "PHOTOS_SET", photos: [{ id: "new" }] });
+  assert.equal(next.reviewedExterior, false);
+});
+
 test("le mode photo est le mode initial et une nouvelle recherche efface l'ancien résultat", () => {
   assert.equal(initialState.mode, "photos");
   const old = { ...initialState, phase: "succeeded", result: { location: "old" } };

@@ -40,3 +40,21 @@ def test_oversized_body_is_rejected_before_multipart_parsing(tmp_path, monkeypat
             "Content-Type": "multipart/form-data; boundary=x",
         })
         assert response.status_code == 413
+
+
+def test_chunked_body_cannot_bypass_limit(tmp_path, monkeypatch):
+    monkeypatch.delenv("NETRYX_API_TOKEN", raising=False)
+    app = create_app(store=JobStore(tmp_path / "jobs.sqlite3"), start_worker=False)
+    with TestClient(app) as client:
+        response = client.post("/api/v1/geolocations", content=iter([b"x" * 32768] * 3),
+                               headers={"Content-Type": "application/json"})
+        assert response.status_code == 413
+
+
+def test_wrong_token_is_rejected_before_reading_body(tmp_path, monkeypatch):
+    monkeypatch.setenv("NETRYX_API_TOKEN", "test-only-token")
+    app = create_app(store=JobStore(tmp_path / "jobs.sqlite3"), start_worker=False)
+    with TestClient(app) as client:
+        response = client.post("/api/v1/photo-geolocations", content=b"x",
+                               headers={"Content-Length": str(43 * 1024 * 1024)})
+        assert response.status_code == 401

@@ -26,6 +26,7 @@ export function reduce(state, action) {
         ...state,
         photos: Array.isArray(action.photos) ? action.photos : [],
         photoSelectionError: action.error ?? null,
+        reviewedExterior: false,
       };
     case "PHOTO_REMOVE":
       return { ...state, photos: state.photos.filter((photo) => photo.id !== action.id) };

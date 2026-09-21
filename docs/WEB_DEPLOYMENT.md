@@ -13,6 +13,7 @@ GitHub Pages cannot execute Python, keep secrets, run CUDA, or process jobs.
 ```bash
 uv pip install --python .venv/bin/python -r requirements-test.txt
 .venv/bin/python -m pytest tests -q
+npm --prefix frontend ci
 npm --prefix frontend test
 npm --prefix frontend run check
 NETRYX_RESULTS_DIR=/opt/data/cache/netryx .venv/bin/python webapp_server.py
@@ -211,6 +212,34 @@ polling, and the real Pages CORS origin work over HTTPS. A temporary quick-tunne
 URL is not a permanent deployment. The NAS administrator must ensure the API
 and tunnel start automatically after a NAS/container restart; a background
 process launched from a terminal alone does not provide reboot persistence.
+
+#### Process supervision on this machine
+
+`deploy/start.sh` runs Supervisor in the foreground. The API is restarted if it
+crashes, with rotating private logs and child-process-group termination. It
+binds only to loopback. It uses `/opt/data/services/netryx/api.env` (mode 0600)
+for the private API token, CORS and runtime configuration. The Supervisor
+environment is `/opt/data/services/netryx/supervisor-venv`.
+
+```bash
+# API only, until the named tunnel has been authorized and configured:
+sh deploy/start.sh
+
+# Once /opt/data/services/netryx/tunnel.yml exists and has been verified:
+NETRYX_TUNNEL_ENABLED=true sh deploy/start.sh
+```
+
+Run only one supervisor. To query it without exposing any secrets:
+
+```bash
+/opt/data/services/netryx/supervisor-venv/bin/supervisorctl \
+  -s unix:///opt/data/services/netryx/supervisor.sock status
+```
+
+The NAS administrator should arrange for the chosen command to execute on
+container startup, with the existing GPU and persistent `/opt/data` mounts.
+Do not open router ports or forward Internet traffic to the NAS admin interface.
+These scripts supervise processes but do not modify the NAS startup settings.
 
 1. Fork the upstream repository; do not push to `rushowr/...` directly.
 2. Set `frontend/js/runtime-config.js` `apiBase` to the deployed HTTPS API.

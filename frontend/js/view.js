@@ -173,6 +173,7 @@ export function createView(document) {
       elements.urlMode.setAttribute("aria-selected", String(state.mode === "url"));
       elements.submit.disabled = busy;
       elements.photoSubmit.disabled = busy;
+      elements.reviewedExterior.checked = state.reviewedExterior;
       elements.submit.textContent = busy ? "Analyse en cours…" : "Lancer l’analyse";
       elements.photoSubmit.textContent = busy ? "Analyse en cours…" : "Lancer l’analyse photo";
       elements.progressPanel.setAttribute("aria-busy", String(busy));

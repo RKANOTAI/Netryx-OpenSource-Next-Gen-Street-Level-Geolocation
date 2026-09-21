@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Netryx estime la position d’une caméra à partir de photos extérieures ou d’une annonce publique.">
+  <meta name="theme-color" content="#08090a">
+  <title>Netryx — Estimation de position</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/tokens.css">
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Netryx, accueil">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Netryx</span>
+      <span class="brand-version">WEB</span>
+    </a>
+    <div class="header-actions">
+      <div class="header-status" title="État de connexion à l’API">
+        <span id="api-status-dot" class="status-dot" aria-hidden="true"></span>
+        <span id="api-status-text">Connexion au moteur…</span>
+      </div>
+      <button id="settings-toggle" class="header-button" type="button" aria-controls="connection-settings" aria-expanded="false">Connexion</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <section class="hero" aria-labelledby="lookup-title">
+      <p class="eyebrow">Photo geolocation · Panoramax</p>
+      <h1 id="lookup-title">Une photo.<br>Une caméra estimée.</h1>
+      <p class="hero-copy">
+        Comparez des extérieurs avec de l’imagerie de rue ouverte ou envoyez l’URL publique d’une annonce. Le résultat indique une position de caméra estimée, jamais une adresse de propriété vérifiée.
+      </p>
+    </section>
+
+    <section class="search-shell" aria-label="Nouvelle recherche">
+      <div class="search-panel">
+        <div class="mode-tabs" role="tablist" aria-label="Mode de recherche">
+          <button id="mode-photos" class="mode-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="photo-form">Photos</button>
+          <button id="mode-url" class="mode-tab" type="button" role="tab" aria-selected="false" aria-controls="geolocation-form">URL d’annonce</button>
+        </div>
+
+        <form id="photo-form" novalidate>
+          <div class="form-intro">
+            <h2>Photos extérieures</h2>
+            <p>Ajoutez jusqu’à 4 photos JPEG ou PNG. Une zone de recherche plausible est obligatoire.</p>
+          </div>
+          <div class="upload-field">
+            <label class="upload-dropzone" for="photo-files">
+              <span class="upload-icon" aria-hidden="true">＋</span>
+              <span><strong>Choisir des photos</strong><small>JPEG ou PNG · 10 Mo maximum par fichier</small></span>
+              <input id="photo-files" name="photos" type="file" accept="image/jpeg,image/png" multiple aria-describedby="photo-files-help photo-files-error">
+            </label>
+            <p id="photo-files-help" class="field-help">Les fichiers restent dans votre navigateur jusqu’à l’envoi.</p>
+            <p id="photo-files-error" class="field-error" role="alert" hidden></p>
+            <ul id="photo-previews" class="photo-previews" aria-live="polite"></ul>
+          </div>
+
+          <fieldset class="region-fields">
+            <legend>Centre de la zone à explorer</legend>
+            <p class="fieldset-help">Ces coordonnées définissent la recherche, pas une précision d’adresse.</p>
+            <div class="field-grid field-grid-three">
+              <label class="field-label" for="photo-latitude">Latitude<span aria-hidden="true">*</span>
+                <input id="photo-latitude" name="latitude" type="number" inputmode="decimal" min="-85" max="85" step="any" placeholder="48.8566" required>
+              </label>
+              <label class="field-label" for="photo-longitude">Longitude<span aria-hidden="true">*</span>
+                <input id="photo-longitude" name="longitude" type="number" inputmode="decimal" min="-180" max="180" step="any" placeholder="2.3522" required>
+              </label>
+              <label class="field-label" for="photo-radius">Rayon (m)<span aria-hidden="true">*</span>
+                <input id="photo-radius" name="radiusM" type="number" inputmode="numeric" min="50" max="1000" step="1" placeholder="300" required>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="photo-options">
+            <label class="check-label" for="reviewed-exterior">
+              <input id="reviewed-exterior" name="reviewedExterior" type="checkbox" required>
+              <span>Je confirme avoir vérifié visuellement que <strong>toutes</strong> les images sélectionnées montrent des extérieurs.</span>
+            </label>
+            <label class="field-label quality-label" for="image-size">Qualité de l’imagerie
+              <select id="image-size" name="imageSize">
+                <option value="hd" selected>HD · plus détaillée</option>
+                <option value="sd">SD · plus rapide</option>
+              </select>
+            </label>
+          </div>
+          <p id="photo-error" class="field-error form-error" role="alert" hidden></p>
+          <button id="photo-submit-button" class="primary-button" type="submit">Lancer l’analyse photo</button>
+        </form>
+
+        <form id="geolocation-form" novalidate hidden>
+          <div class="form-intro">
+            <h2>URL d’annonce publique</h2>
+            <p>Le moteur récupère les images accessibles publiquement et conserve le suivi de la tâche.</p>
+          </div>
+          <label class="search-label" for="listing-url">URL de l’annonce</label>
+          <div class="search-row">
+            <div class="input-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.5 13.5l3-3m-6.7 6.7-1.4 1.4a3 3 0 104.2 4.2l3.2-3.2a3 3 0 000-4.2m4.4-8.6 1.4-1.4a3 3 0 114.2 4.2l-3.2 3.2a3 3 0 01-4.2 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <input class="url-input" id="listing-url" name="listingUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://www.leboncoin.fr/ad/…" required maxlength="2048" aria-describedby="url-help url-error">
+            </div>
+            <button id="submit-button" class="primary-button" type="submit">Lancer l’analyse</button>
+          </div>
+          <div class="input-meta">
+            <p id="url-error" class="field-error" role="alert" hidden></p>
+            <p id="url-help" class="security-note">URL publique uniquement · aucune clé serveur exposée au navigateur</p>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <details id="connection-settings" class="connection-settings">
+      <summary id="connection-summary">Connexion au moteur API</summary>
+      <div class="settings-body">
+        <p id="connection-description" class="settings-copy">Configurez l’origine HTTPS publique de l’API. L’override est conservé dans ce navigateur, jamais dans l’URL.</p>
+        <form id="connection-form" class="settings-form" novalidate>
+          <label class="field-label" for="api-origin">Origine publique de l’API
+            <input id="api-origin" name="apiOrigin" type="url" inputmode="url" autocomplete="url" placeholder="https://api.exemple.fr">
+          </label>
+          <div class="settings-actions">
+            <button class="secondary-button" type="submit">Enregistrer et tester</button>
+            <button id="clear-api-override" class="text-button" type="button">Réinitialiser</button>
+          </div>
+          <p id="api-origin-error" class="field-error" role="alert" hidden></p>
+        </form>
+        <div class="token-block">
+          <label class="field-label" for="api-token">Jeton d’accès (optionnel)
+            <input id="api-token" name="apiToken" type="password" autocomplete="new-password" placeholder="Saisi manuellement, non mémorisé">
+          </label>
+          <div class="settings-actions">
+            <button id="save-token" class="secondary-button" type="button">Utiliser pour cette session</button>
+            <button id="clear-token" class="text-button" type="button">Effacer le jeton</button>
+          </div>
+          <p id="auth-help" class="settings-help" hidden></p>
+          <p id="connection-feedback" class="settings-feedback" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </details>
+
+    <div class="workspace">
+      <section id="progress-panel" class="panel" aria-labelledby="progress-title" aria-busy="false">
+        <div class="panel-header">
+          <h2 id="progress-title" class="panel-title" tabindex="-1">Pipeline d’analyse</h2>
+          <span id="progress-percent" class="panel-kicker">Prêt</span>
+        </div>
+        <div class="progress-body">
+          <ol id="phase-list" class="phase-list" aria-label="Étapes de l’analyse"></ol>
+          <p id="progress-message" class="phase-message" role="status" aria-live="polite">En attente d’une recherche.</p>
+          <progress id="progress-bar" max="100" aria-label="Progression de l’analyse"></progress>
+        </div>
+      </section>
+
+      <section id="output-panel" class="panel" aria-labelledby="result-title">
+        <div class="panel-header">
+          <h2 id="result-title" class="panel-title" tabindex="-1">Résultat</h2>
+          <span id="result-status" class="panel-kicker">Aucune analyse</span>
+        </div>
+
+        <div id="empty-state" class="empty-state">
+          <div>
+            <div class="empty-orbit" aria-hidden="true"></div>
+            <p>La position estimée, le niveau de confiance et les preuves apparaîtront ici.</p>
+          </div>
+        </div>
+
+        <div id="result-panel" hidden>
+          <div class="result-content">
+            <span class="result-badge">Estimation de caméra</span>
+            <h3 id="location-label" class="location-label"></h3>
+            <p class="result-disclaimer">Cette position est une estimation de la caméra. Elle ne confirme pas l’adresse d’une propriété.</p>
+            <p id="result-summary" class="result-summary"></p>
+            <dl class="result-facts">
+              <div><dt>Confiance</dt><dd id="confidence-value"></dd></div>
+              <div><dt>Coordonnées</dt><dd id="coordinates-value"></dd></div>
+            </dl>
+            <div class="source-links" aria-label="Sources externes">
+              <a id="maps-link" class="maps-link" target="_blank" rel="noopener noreferrer">
+                Ouvrir la position dans Google Maps ↗
+              </a>
+              <a id="panoramax-link" class="source-link" target="_blank" rel="noopener noreferrer" hidden>
+                Voir la source Panoramax ↗
+              </a>
+            </div>
+            <ul id="source-list" class="source-list"></ul>
+          </div>
+          <section class="evidence-section" aria-labelledby="evidence-title">
+            <h3 id="evidence-title" class="evidence-heading">Éléments de preuve du moteur</h3>
+            <ul id="evidence-list" class="evidence-list"></ul>
+          </section>
+        </div>
+
+        <div id="not-found-panel" class="error-body" hidden>
+          <div>
+            <div class="error-icon" aria-hidden="true">?</div>
+            <h3>Aucune correspondance exploitable</h3>
+            <p>Le moteur n’a pas trouvé assez d’indices convergents pour estimer une position de caméra.</p>
+            <button class="secondary-button retry-button" type="button">Nouvelle tentative</button>
+          </div>
+        </div>
+
+        <div id="error-panel" class="error-body" role="alert" hidden>
+          <div>
+            <div class="error-icon" aria-hidden="true">!</div>
+            <h3 id="error-title" tabindex="-1">Analyse impossible</h3>
+            <p id="error-message"></p>
+            <button class="secondary-button retry-button" type="button">Réessayer</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span>Netryx produit une estimation technique de caméra, pas une confirmation juridique de l’adresse.</span>
+      <a href="https://github.com/RKANOTAI/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation" target="_blank" rel="noopener noreferrer">Code source ↗</a>
+    </footer>
+  </main>
+
+  <script src="./js/runtime-config.js"></script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+-r requirements-web.txt
+pytest>=8,<10
+numpy>=2,<3
+Pillow>=11,<13

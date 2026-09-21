@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Netryx runtime data and local credentials
+runtime/
+.env
+netryx.env
+*.sqlite3
+
+# Generated indexes and model artifacts
+cosplace_parts/
+index/
+*.npz
+*.npy
+
+# Frontend dependencies
+node_modules/

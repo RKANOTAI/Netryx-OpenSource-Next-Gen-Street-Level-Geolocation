@@ -1,0 +1,44 @@
+name: Web checks
+
+on:
+  pull_request:
+    paths:
+      - "netryx_web/**"
+      - "frontend/**"
+      - "tests/**"
+      - "requirements-web.txt"
+      - "requirements-test.txt"
+      - "webapp_server.py"
+      - ".github/workflows/web-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "netryx_web/**"
+      - "frontend/**"
+      - "tests/**"
+      - "requirements-web.txt"
+      - "requirements-test.txt"
+      - "webapp_server.py"
+      - ".github/workflows/web-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: uv venv .venv
+      - run: uv pip install --python .venv/bin/python -r requirements-test.txt
+      - run: .venv/bin/python -m pytest tests -q
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend test
+      - run: npm --prefix frontend run check

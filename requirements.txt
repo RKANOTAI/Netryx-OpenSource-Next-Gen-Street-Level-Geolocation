@@ -8,5 +8,9 @@ aiohttp
 tkintermapview
 google-generativeai
 requests
+fastapi>=0.117,<1
+uvicorn[standard]>=0.36,<1
+httpx>=0.28,<1
+python-multipart>=0.0.20,<1
 # LightGlue usually needs to be installed from source if not on PyPI as 'lightglue'
 # pip install git+https://github.com/cvg/LightGlue.git

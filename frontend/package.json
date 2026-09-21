@@ -1,0 +1,12 @@
+{
+  "name": "netryx-web-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check js/*.js"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.13"
+  }
+}

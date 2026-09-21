@@ -14,6 +14,27 @@
 
 ## What is Netryx?
 
+### Web edition (this fork)
+
+**[Open the web interface](https://rkanotai.github.io/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation/)**
+
+This fork adds a French web UI, browser photo uploads, explicit exterior-photo
+review, and a queued Python/GPU API using **Panoramax** open street imagery.
+Supply 1–4 exterior JPEG/PNG photos and an approximate search center (50–1000 m
+radius). Results estimate a **panorama camera position**, not a verified property
+address. Coverage and sufficient geometric evidence are required; no universal
+accuracy guarantee is made by this web edition.
+
+GitHub Pages hosts the interface only. The Python/GPU service runs on your own
+machine and needs an HTTPS connection. If no API is configured, the page says so
+instead of displaying invented results. Open **Connexion** to select the API.
+
+- [Deployment and operation](docs/WEB_DEPLOYMENT.md)
+- [Panoramax and local photo searches](docs/OPEN_IMAGERY.md)
+
+The remaining desktop documentation below describes the upstream application;
+its historical Google acquisition path is not used by the web edition.
+
 Netryx is a local-first geolocation tool that identifies the exact GPS coordinates of any street-level photograph. Unlike reverse image search (which matches against uploaded web images), Netryx matches against **systematically crawled street-view panoramas** — meaning it works on any random street corner with zero internet presence.
 
 The core pipeline combines three state-of-the-art computer vision models:
@@ -169,6 +190,45 @@ export GEMINI_API_KEY="your_key_here"
 ---
 
 ## Usage
+
+### Web interface
+
+**Street View acquisition blocked?** The web worker now defaults to
+**Panoramax open street imagery**, without a Google API key. You can also search
+local exterior photos with `python -m netryx_web.locate_photo`. See
+[the practical photo search guide](docs/OPEN_IMAGERY.md) for usage, manual
+exterior review, attribution and coverage limits. This applies to the web/headless
+worker; the historical Tk GUI below is not migrated. A match returns the camera
+position, not a verified property address, and requires a plausible search area.
+
+Netryx includes a French web interface that accepts a public listing URL, runs
+the research as a persisted background job, and returns a textual conclusion,
+confidence evidence, coordinates, and a Google Maps link.
+
+```bash
+# From the repository root, after creating .venv
+uv pip install --python .venv/bin/python -r requirements-web.txt
+
+# Prior Netryx results are read from this directory when available
+export NETRYX_RESULTS_DIR=/opt/data/cache/netryx
+.venv/bin/python webapp_server.py
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). API documentation is
+available at `/api/docs`.
+
+The server first looks for a reproducible `ranked_coordinates.json` artifact
+under `$NETRYX_RESULTS_DIR/<listing-id>/headless/`. For a listing that has not
+been processed yet, the default headless worker searches Panoramax; optionally
+override it with `NETRYX_RESEARCH_COMMAND`. The command receives the generated listing manifest path as its final
+argument and must print one JSON result to stdout. When a source such as
+Leboncoin returns an anti-bot challenge, the optional server-side
+`SCRAPFLY_API_KEY` enables the dedicated acquisition fallback. Secrets always
+remain on the API host; they are never placed in the frontend.
+
+The frontend in `frontend/` is deployable to GitHub Pages. Pages hosts static
+files only: set the public HTTPS API origin in `frontend/js/runtime-config.js`
+and deploy the Python/GPU API separately. See `docs/WEB_DEPLOYMENT.md`.
 
 ### Launch the GUI
 

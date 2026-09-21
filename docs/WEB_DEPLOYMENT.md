@@ -157,8 +157,11 @@ were the submitted Leboncoin source.
 
 This fork's interface is published at
 https://rkanotai.github.io/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation/.
-The API origin stays empty until a real HTTPS deployment has been verified.
-An empty origin works locally; on Pages, **Connexion** explicitly asks for the API.
+The verified API origin is `https://netryx-api.cecilebui.com`, configured in
+`frontend/js/runtime-config.js`. Open **Connexion** and enter the private access
+token to submit searches. A browser-specific API override can be cleared with
+**Réinitialiser**. For a separate deployment, change the public origin or use
+the connection settings; never put the private token in the frontend.
 
 ### Browser photo workflow
 
@@ -197,8 +200,11 @@ chunked bodies. Run a single API process, not multiple GPU-owning workers.
 ### NAS and Cloudflare Tunnel
 
 The chosen domain for this installation is **cecilebui.com**, not kanohub.xyz.
-Only the new subdomain `netryx-api.cecilebui.com` is intended for the API;
-the main website and its existing DNS records must remain unchanged.
+The named tunnel **netryx-web** serves `https://netryx-api.cecilebui.com` through
+an outbound connection from this machine. Only this new subdomain was added;
+the main website and its existing DNS records were not changed. Public health,
+CORS preflight, rejection of unauthenticated requests, authenticated photo
+submission, and completed-job polling have been verified over HTTPS.
 
 Cloudflare Tunnel can connect out from the NAS to an API listening on
 `127.0.0.1:8000`, without opening router ports or exposing the NAS administration.
@@ -220,6 +226,12 @@ crashes, with rotating private logs and child-process-group termination. It
 binds only to loopback. It uses `/opt/data/services/netryx/api.env` (mode 0600)
 for the private API token, CORS and runtime configuration. The Supervisor
 environment is `/opt/data/services/netryx/supervisor-venv`.
+
+The tunnel configuration is `/opt/data/services/netryx/tunnel.yml`. Cloudflare
+credentials stay outside the repository in the current user's `.cloudflared`
+directory. The private API token is the `NETRYX_API_TOKEN` value in `api.env`;
+copy it locally into the site's **Connexion → Jeton d’accès** field. Do not
+paste it into chat, commit it, or share the environment file.
 
 ```bash
 # API only, until the named tunnel has been authorized and configured:

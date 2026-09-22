@@ -41,7 +41,7 @@ def _allowed_asset_hosts() -> set[str]:
     return hosts
 
 
-def _trusted_https_url(value: Any) -> str | None:
+def safe_https_url(value: Any) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -54,12 +54,29 @@ def _trusted_https_url(value: Any) -> str | None:
         parsed.scheme.lower() != "https"
         or parsed.username is not None
         or parsed.password is not None
-        or port is not None
+        or port not in (None, 443)
         or not parsed.hostname
-        or parsed.hostname.lower().rstrip(".") not in _allowed_asset_hosts()
     ):
         return None
     return value.strip()
+
+
+def _trusted_https_url(value: Any) -> str | None:
+    normalized = safe_https_url(value)
+    if normalized is None:
+        return None
+    parsed = urlsplit(normalized)
+    hostname = parsed.hostname.lower().rstrip(".") if parsed.hostname else ""
+    trusted_hosts = _allowed_asset_hosts()
+    host_is_trusted = any(hostname == host or hostname.endswith(f".{host}") for host in trusted_hosts)
+    if not hostname or not host_is_trusted:
+        return None
+    return normalized
+
+
+def trusted_provenance_url(value: Any) -> str | None:
+    """Return a Panoramax source URL only when it matches the asset policy."""
+    return _trusted_https_url(value)
 
 
 def _haversine_m(first: tuple[float, float], second: tuple[float, float]) -> float:
@@ -256,10 +273,10 @@ def _normalise_feature(feature: Any) -> tuple[dict[str, Any] | None, str | None]
     roll = _number(properties, "view:roll", "pers:roll", "roll")
     self_url = _feature_link(feature, "self")
     source_url = (
-        properties.get("source_url")
-        or properties.get("url")
-        or feature.get("source_url")
-        or self_url
+        _trusted_https_url(properties.get("source_url"))
+        or _trusted_https_url(properties.get("url"))
+        or _trusted_https_url(feature.get("source_url"))
+        or _trusted_https_url(self_url)
         or href
     )
     license_url = properties.get("license_url") or _feature_link(feature, "license")

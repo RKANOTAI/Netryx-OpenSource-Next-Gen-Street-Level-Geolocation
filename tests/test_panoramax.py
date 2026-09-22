@@ -352,3 +352,31 @@ def test_flat_photo_without_compass_has_usable_but_unknown_heading(tmp_path):
     # Verification needs a numeric image-local heading; it must not claim north.
     assert metadata["heading"] == 0
     assert metadata["heading_reference"] == "unknown"
+
+
+def test_trusted_provenance_url_uses_hostname_boundaries():
+    accepted = "https://images.panoramax.ign.fr/pictures/test"
+    accepted_default_port = "https://panoramax.ign.fr:443/pictures/test"
+
+    assert panoramax.trusted_provenance_url(accepted) == accepted
+    assert panoramax.trusted_provenance_url(accepted_default_port) == accepted_default_port
+    for value in (
+        "https://evilpanoramax.example/pictures/test",
+        "https://panoramax.evil.example/pictures/test",
+        "https://panoramax.com.evil/pictures/test",
+        "https://user:pass@panoramax.ign.fr/pictures/test",
+        "https://panoramax.ign.fr:8443/pictures/test",
+    ):
+        assert panoramax.trusted_provenance_url(value) is None
+
+
+def test_normalise_feature_falls_back_to_trusted_asset_for_untrusted_source_url():
+    panoid = "c59ab61f-0a62-4f27-8724-017df8c2730a"
+    feature = _feature(panoid, 2.0, 49.0)
+    feature["properties"]["source_url"] = "https://panoramax.com.evil/pictures/test"
+
+    pano, reason = panoramax._normalise_feature(feature)
+
+    assert reason is None
+    assert pano is not None
+    assert pano["source_url"] == pano["image_url"]

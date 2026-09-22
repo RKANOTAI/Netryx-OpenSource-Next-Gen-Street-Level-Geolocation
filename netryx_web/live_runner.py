@@ -14,10 +14,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 try:
-    from .research import google_maps_url, reverse_geocode_ban
+    from .research import google_maps_url, reverse_geocode_ban, structured_panoramax_sources
     from .photo_selection import ExteriorClassifier, select_exterior_images
 except ImportError:  # direct `python /path/live_runner.py` execution
-    from netryx_web.research import google_maps_url, reverse_geocode_ban
+    from netryx_web.research import google_maps_url, reverse_geocode_ban, structured_panoramax_sources
     from netryx_web.photo_selection import ExteriorClassifier, select_exterior_images
 
 
@@ -197,6 +197,17 @@ def query_images(
     return selected
 
 
+_PROVENANCE_FIELDS = ("provider", "source_url", "license", "license_url", "attribution")
+
+
+def _copy_provenance(source: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    for field in _PROVENANCE_FIELDS:
+        if field in source:
+            value = source[field]
+            target[field] = list(value) if field == "attribution" and isinstance(value, list) else value
+    return target
+
+
 def aggregate_verified_candidates(
     rows: Iterable[dict[str, Any]], *, min_inliers: int = 8
 ) -> list[dict[str, Any]]:
@@ -226,14 +237,13 @@ def aggregate_verified_candidates(
                 "sources": [],
             },
         )
-        current["sources"].append(
-            {
-                "image": row["image"],
-                "heading": float(row["heading"]),
-                "inliers": int(row["inliers"]),
-                "raw_matches": int(row["raw_matches"]),
-            }
-        )
+        source = _copy_provenance(row, {
+            "image": row["image"],
+            "heading": float(row["heading"]),
+            "inliers": int(row["inliers"]),
+            "raw_matches": int(row["raw_matches"]),
+        })
+        current["sources"].append(source)
     for candidate in grouped.values():
         sources = candidate["sources"]
         candidate["query_support"] = len({source["image"] for source in sources})
@@ -252,6 +262,10 @@ def aggregate_verified_candidates(
     )
 
 
+def _structured_panoramax_sources(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    return structured_panoramax_sources(candidate)
+
+
 def build_result(
     candidate: dict[str, Any],
     *,
@@ -261,11 +275,14 @@ def build_result(
 ) -> dict[str, Any]:
     latitude = float(candidate["lat"])
     longitude = float(candidate["lon"])
+    if not math.isfinite(latitude) or not math.isfinite(longitude):
+        raise ValueError("candidate coordinates must be finite")
     label = reverse_geocode(latitude, longitude) or f"{latitude:.6f}, {longitude:.6f}"
     support = int(candidate["query_support"])
     best_inliers = int(candidate["best_inliers"])
     level = "HIGH" if support >= 2 and best_inliers >= 40 else "MEDIUM" if best_inliers >= 15 else "LOW"
-    return {
+    structured_sources = _structured_panoramax_sources(candidate)
+    result = {
         "summary_fr": (
             f"La meilleure correspondance d’imagerie de rue se situe près de {label}. "
             "La position est une estimation de caméra à vérifier avant tout déplacement."
@@ -299,7 +316,15 @@ def build_result(
             },
         ],
         "google_maps_url": google_maps_url(latitude, longitude),
+        "sources": structured_sources,
     }
+    panoramax_source = next(
+        (source for source in structured_sources if source["provider"].lower() == "panoramax"),
+        None,
+    )
+    if panoramax_source is not None:
+        result["panoramax_url"] = panoramax_source["source_url"]
+    return result
 
 
 def _geocode_location(location_hint: str | None) -> tuple[float, float] | None:
@@ -603,7 +628,7 @@ def _verify(
                     match_array,
                 )
                 rows.append(
-                    {
+                    _copy_provenance(candidate, {
                         "panoid": candidate["panoid"],
                         "lat": candidate["lat"],
                         "lon": candidate["lon"],
@@ -611,7 +636,7 @@ def _verify(
                         "heading": candidate["heading"],
                         "raw_matches": raw,
                         "inliers": inliers,
-                    }
+                    })
                 )
                 candidate_view.close()
                 del candidate_features
@@ -635,7 +660,7 @@ def _verify(
                     features["keypoints"][0].detach().cpu().numpy(),
                     match_array,
                 )
-                current = {
+                current = _copy_provenance(candidate, {
                     "panoid": candidate["panoid"],
                     "lat": candidate["lat"],
                     "lon": candidate["lon"],
@@ -643,7 +668,7 @@ def _verify(
                     "heading": heading,
                     "raw_matches": raw,
                     "inliers": inliers,
-                }
+                })
                 if best_for_candidate is None or (inliers, raw) > (
                     best_for_candidate["inliers"],
                     best_for_candidate["raw_matches"],
@@ -712,14 +737,18 @@ def _run(manifest_path: Path) -> dict[str, Any]:
     )
     winner = next((pano for pano in panos if pano["panoid"] == ranked[0]["panoid"]), {})
     if imagery_provider() == "panoramax":
-        attribution = winner.get("attribution") or []
+        source = next(
+            (item for item in result.get("sources", []) if item.get("provider", "").lower() == "panoramax"),
+            {},
+        )
+        attribution = source.get("attribution") or winner.get("attribution") or []
         if isinstance(attribution, list):
             attribution = ", ".join(attribution)
         result["evidence"].append({
             "kind": "imagery_source", "label_fr": "Source et licence Panoramax",
             "detail_fr": (
-                f"Panoramax · {attribution} · {winner.get('license', '')} · "
-                f"{winner.get('source_url', '')} · {winner.get('license_url', '')}"
+                f"Panoramax · {attribution} · {source.get('license', '')} · "
+                f"{source.get('source_url', '')} · {source.get('license_url', '')}"
             ),
             "value": None, "unit": None,
         })

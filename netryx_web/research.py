@@ -33,6 +33,48 @@ def google_maps_url(latitude: float, longitude: float) -> str:
     return f"https://www.google.com/maps/search/?api=1&query={query}"
 
 
+def structured_panoramax_sources(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    from .panoramax import safe_https_url, trusted_provenance_url
+
+    structured: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    raw_sources = candidate.get("sources")
+    source_items = list(raw_sources) if isinstance(raw_sources, list) else []
+    if all(candidate.get(field) is not None for field in ("provider", "source_url", "license")):
+        source_items.insert(0, candidate)
+    for source in source_items:
+        if not isinstance(source, dict):
+            continue
+        source_url = trusted_provenance_url(source.get("source_url"))
+        provider = source.get("provider")
+        license_name = source.get("license")
+        if (
+            source_url is None
+            or not isinstance(provider, str)
+            or provider.strip().lower() != "panoramax"
+            or not isinstance(license_name, str)
+            or not license_name.strip()
+            or source_url in seen_urls
+        ):
+            continue
+        seen_urls.add(source_url)
+        item: dict[str, Any] = {
+            "provider": "panoramax",
+            "source_url": source_url,
+            "license": license_name.strip(),
+        }
+        license_url = safe_https_url(source.get("license_url"))
+        if license_url is not None:
+            item["license_url"] = license_url
+        attribution = source.get("attribution")
+        if isinstance(attribution, list):
+            cleaned = [value.strip() for value in attribution if isinstance(value, str) and value.strip()]
+            if cleaned:
+                item["attribution"] = cleaned
+        structured.append(item)
+    return structured
+
+
 def project_point(latitude: float, longitude: float, heading: float, distance_m: float) -> tuple[float, float]:
     radius = 6_371_000.0
     bearing = math.radians(heading)
@@ -116,7 +158,23 @@ class ArtifactResearchPipeline:
             top = payload["combined_ranked"][0]
             camera_lat = float(top["lat"])
             camera_lon = float(top["lon"])
-            sources = list(top.get("sources") or [])
+            raw_sources = top.get("sources")
+            if raw_sources is None:
+                sources = []
+            elif isinstance(raw_sources, list):
+                sources = list(raw_sources)
+            else:
+                raise TypeError("invalid provenance sources container")
+            if not all(isinstance(source, dict) for source in sources):
+                raise TypeError("invalid provenance sources")
+            headings = [float(source["heading"]) for source in sources if "heading" in source]
+            if not all(math.isfinite(value) for value in (camera_lat, camera_lon, *headings)):
+                raise ValueError("non-finite artifact coordinate or heading")
+            query_support = int(top.get("query_support") or len(sources))
+            sum_inliers = int(top.get("sum_inliers") or sum(int(s.get("inliers", 0)) for s in sources))
+            best_inliers = int(top.get("best_inliers") or max((int(s.get("inliers", 0)) for s in sources), default=0))
+            panoids_indexed = int(payload.get("panoids_indexed", 0))
+            global_entries = int(payload.get("global_entries", 0))
         except (OSError, ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError) as exc:
             raise ResearchError(
                 "INVALID_RESEARCH_ARTIFACT",
@@ -124,7 +182,6 @@ class ArtifactResearchPipeline:
             ) from exc
 
         progress("refining", 82, "Conversion des correspondances en position cartographique…")
-        headings = [float(source["heading"]) for source in sources if "heading" in source]
         heading = circular_mean(headings)
         latitude, longitude = project_point(
             camera_lat,
@@ -133,9 +190,6 @@ class ArtifactResearchPipeline:
             self.facade_distance_m,
         )
         label = self.reverse_geocode(latitude, longitude)
-        query_support = int(top.get("query_support") or len(sources))
-        sum_inliers = int(top.get("sum_inliers") or sum(int(s.get("inliers", 0)) for s in sources))
-        best_inliers = int(top.get("best_inliers") or max((int(s.get("inliers", 0)) for s in sources), default=0))
         confidence = "HIGH" if query_support >= 2 and sum_inliers >= 80 and best_inliers >= 40 else "MEDIUM"
         location_label = label or f"{latitude:.6f}, {longitude:.6f}"
 
@@ -154,10 +208,10 @@ class ArtifactResearchPipeline:
                 "kind": "streetview_index",
                 "label_fr": "Couverture Street View",
                 "detail_fr": (
-                    f"{int(payload.get('panoids_indexed', 0))} panoramas et "
-                    f"{int(payload.get('global_entries', 0))} vues ont été comparés."
+                    f"{panoids_indexed} panoramas et "
+                    f"{global_entries} vues ont été comparés."
                 ),
-                "value": int(payload.get("panoids_indexed", 0)),
+                "value": panoids_indexed,
                 "unit": "panoramas",
             },
             {
@@ -171,7 +225,8 @@ class ArtifactResearchPipeline:
                 "unit": "m",
             },
         ]
-        return {
+        structured_sources = structured_panoramax_sources(top)
+        result = {
             "summary_fr": (
                 f"La meilleure correspondance place le bien près de {location_label}. "
                 "La position est une estimation technique à vérifier avant tout déplacement."
@@ -184,7 +239,15 @@ class ArtifactResearchPipeline:
             "confidence": {"level": confidence, "score": None},
             "evidence": evidence,
             "google_maps_url": google_maps_url(latitude, longitude),
+            "sources": structured_sources,
         }
+        panoramax_source = next(
+            (source for source in structured_sources if source["provider"].lower() == "panoramax"),
+            None,
+        )
+        if panoramax_source is not None:
+            result["panoramax_url"] = panoramax_source["source_url"]
+        return result
 
 
 class CommandResearchPipeline:

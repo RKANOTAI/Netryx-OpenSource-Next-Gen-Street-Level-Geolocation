@@ -1,9 +1,12 @@
 import math
+import sys
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 from netryx_web.live_runner import (
+    _verify,
     aggregate_verified_candidates,
     build_result,
     build_static_view_url,
@@ -186,3 +189,274 @@ def test_build_result_uses_candidate_coordinates_and_generates_map_url():
     assert "2.2222220" in result["google_maps_url"]
     assert result["location"]["label_fr"] == "Zone test"
     assert result["evidence"][1]["value"] == 12
+
+
+def test_build_result_exposes_deduplicated_safe_panoramax_sources():
+    candidate = {
+        "panoid": "dynamic-pano",
+        "lat": 48.111111,
+        "lon": 2.222222,
+        "query_support": 1,
+        "sum_inliers": 20,
+        "best_inliers": 20,
+        "sources": [
+            {
+                "image": "first.jpg",
+                "heading": 90,
+                "inliers": 20,
+                "raw_matches": 25,
+                "provider": "panoramax",
+                "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+                "license": "etalab-2.0",
+                "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+                "attribution": ["Test producer"],
+            },
+            {
+                "image": "second.jpg",
+                "heading": 105,
+                "inliers": 18,
+                "raw_matches": 22,
+                "provider": "panoramax",
+                "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+                "license": "etalab-2.0",
+                "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+                "attribution": ["Test producer"],
+            },
+            {
+                "image": "evil.jpg",
+                "heading": 120,
+                "inliers": 17,
+                "raw_matches": 20,
+                "provider": "panoramax",
+                "source_url": "https://panoramax.evil.example/pictures/dynamic-pano",
+                "license": "etalab-2.0",
+            },
+        ],
+    }
+
+    result = build_result(
+        candidate,
+        panos_indexed=12,
+        views_tested=36,
+        reverse_geocode=lambda lat, lon: "Zone test",
+    )
+
+    assert result["sources"] == [
+        {
+            "provider": "panoramax",
+            "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+            "license": "etalab-2.0",
+            "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+            "attribution": ["Test producer"],
+        }
+    ]
+    assert result["panoramax_url"] == "https://panoramax.ign.fr/pictures/dynamic-pano"
+
+
+def test_build_result_drops_unsafe_optional_provenance_fields():
+    candidate = {
+        "panoid": "dynamic-pano",
+        "lat": 48.111111,
+        "lon": 2.222222,
+        "query_support": 1,
+        "sum_inliers": 20,
+        "best_inliers": 20,
+        "sources": [
+            {
+                "provider": "panoramax",
+                "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+                "license": "etalab-2.0",
+                "license_url": "http://evil.example/license",
+                "attribution": ["Test producer", 42],
+            }
+        ],
+    }
+
+    result = build_result(candidate, panos_indexed=1, views_tested=1, reverse_geocode=lambda *_: "Zone test")
+
+    assert result["sources"] == [
+        {
+            "provider": "panoramax",
+            "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+            "license": "etalab-2.0",
+            "attribution": ["Test producer"],
+        }
+    ]
+
+
+def test_build_result_rejects_false_provider_identity():
+    candidate = {
+        "panoid": "dynamic-pano",
+        "lat": 48.111111,
+        "lon": 2.222222,
+        "query_support": 1,
+        "sum_inliers": 20,
+        "best_inliers": 20,
+        "sources": [{
+            "provider": "not-panoramax",
+            "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+            "license": "etalab-2.0",
+        }],
+    }
+
+    result = build_result(candidate, panos_indexed=1, views_tested=1, reverse_geocode=lambda *_: "Zone test")
+
+    assert result["sources"] == []
+    assert "panoramax_url" not in result
+
+
+def test_build_result_rejects_non_finite_coordinates():
+    candidate = {
+        "lat": "nan",
+        "lon": 2.222222,
+        "query_support": 1,
+        "sum_inliers": 20,
+        "best_inliers": 20,
+    }
+
+    with pytest.raises(ValueError, match="finite"):
+        build_result(candidate, panos_indexed=1, views_tested=1, reverse_geocode=lambda *_: "Zone test")
+
+
+def test_verify_preserves_provenance_for_perspective_and_panoramic_rows(tmp_path, monkeypatch):
+    class FakeValue:
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return object()
+
+    class FakeExtractor:
+        def __init__(self, **_kwargs):
+            pass
+
+        def eval(self):
+            return self
+
+        def to(self, _device):
+            return self
+
+        def extract(self, _image):
+            return {"keypoints": [FakeValue()]}
+
+    class FakeMatcher:
+        def __init__(self, **_kwargs):
+            pass
+
+        def eval(self):
+            return self
+
+        def to(self, _device):
+            return self
+
+        def __call__(self, _images):
+            return {"matches0": [FakeValue()]}
+
+    class NoGrad:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class FakeCrops:
+        def __getitem__(self, _item):
+            return object()
+
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: False),
+        no_grad=lambda: NoGrad(),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "lightglue", SimpleNamespace(DISK=FakeExtractor, LightGlue=FakeMatcher))
+    monkeypatch.setitem(
+        sys.modules,
+        "shared_utils",
+        SimpleNamespace(
+            equirectangular_to_rectilinear_torch=lambda *args: FakeCrops(),
+            get_projection_base_dirs=lambda *_args: None,
+            pil_to_tensor=lambda image: image,
+        ),
+    )
+    monkeypatch.setattr("netryx_web.live_runner._ransac_inliers", lambda *_args: (12, 10))
+
+    query = tmp_path / "query.jpg"
+    perspective = tmp_path / "perspective.jpg"
+    panoramic = tmp_path / "panoramic.jpg"
+    for path in (query, perspective, panoramic):
+        Image.new("RGB", (100, 50), "red").save(path)
+
+    def metadata(panoid, path, is_perspective, source_url):
+        return {
+            "panoid": panoid,
+            "lat": 1.0,
+            "lon": 2.0,
+            "image": query.name,
+            "score": 0.9,
+            "heading": 90,
+            "path": str(path),
+            "perspective": is_perspective,
+            "provider": "panoramax",
+            "source_url": source_url,
+            "license": "etalab-2.0",
+            "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+            "attribution": ["Test producer"],
+        }
+
+    verified = _verify(
+        [query],
+        [
+            metadata("perspective", perspective, True, "https://panoramax.ign.fr/pictures/perspective"),
+            metadata("panoramic", panoramic, False, "https://panoramax.ign.fr/pictures/panoramic"),
+        ],
+        max_candidates=2,
+    )
+
+    assert {row["panoid"] for row in verified} == {"perspective", "panoramic"}
+    for row in verified:
+        assert row["provider"] == "panoramax"
+        assert row["source_url"].startswith("https://panoramax.ign.fr/")
+        assert row["license"] == "etalab-2.0"
+        assert row["license_url"].startswith("https://www.etalab.gouv.fr/")
+        assert row["attribution"] == ["Test producer"]
+
+
+def test_build_result_omits_scalar_provenance_sources():
+    candidate = {
+        "panoid": "dynamic-pano",
+        "lat": 48.111111,
+        "lon": 2.222222,
+        "query_support": 1,
+        "sum_inliers": 20,
+        "best_inliers": 20,
+        "sources": 123,
+    }
+
+    result = build_result(candidate, panos_indexed=1, views_tested=1, reverse_geocode=lambda *_: "Zone test")
+
+    assert result["sources"] == []
+    assert "panoramax_url" not in result
+
+
+def test_build_result_does_not_mutate_candidate_provenance_sources():
+    original_sources = [{"image": "first.jpg"}]
+    candidate = {
+        "panoid": "dynamic-pano",
+        "lat": 48.111111,
+        "lon": 2.222222,
+        "query_support": 1,
+        "sum_inliers": 20,
+        "best_inliers": 20,
+        "provider": "panoramax",
+        "source_url": "https://panoramax.ign.fr/pictures/dynamic-pano",
+        "license": "etalab-2.0",
+        "sources": original_sources,
+    }
+
+    build_result(candidate, panos_indexed=1, views_tested=1, reverse_geocode=lambda *_: "Zone test")
+
+    assert candidate["sources"] == original_sources
+    assert all(source is not candidate for source in candidate["sources"])

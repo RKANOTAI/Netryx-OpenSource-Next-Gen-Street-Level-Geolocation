@@ -137,3 +137,38 @@ def test_aggregate_deduplicates_pano_and_image_using_best_view():
         ("a.jpg", 20),
         ("b.jpg", 8),
     ]
+
+
+def test_aggregate_preserves_structured_panoramax_provenance():
+    ranked = aggregate_verified_candidates(
+        [
+            {
+                "panoid": "one",
+                "lat": 1.0,
+                "lon": 2.0,
+                "image": "a.jpg",
+                "heading": 90,
+                "inliers": 10,
+                "raw_matches": 12,
+                "provider": "panoramax",
+                "source_url": "https://panoramax.ign.fr/pictures/one",
+                "license": "etalab-2.0",
+                "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+                "attribution": ["Test producer"],
+            }
+        ]
+    )
+
+    assert ranked[0]["sources"] == [
+        {
+            "image": "a.jpg",
+            "heading": 90.0,
+            "inliers": 10,
+            "raw_matches": 12,
+            "provider": "panoramax",
+            "source_url": "https://panoramax.ign.fr/pictures/one",
+            "license": "etalab-2.0",
+            "license_url": "https://www.etalab.gouv.fr/licence-ouverte-open-licence/",
+            "attribution": ["Test producer"],
+        }
+    ]

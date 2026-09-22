@@ -243,7 +243,7 @@ commit:
 ```bash
 git clone https://github.com/RKANOTAI/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation.git \
   /mnt/Serveur/NetryxS6/source
-git -C /mnt/Serveur/NetryxS6/source checkout <reviewed-commit>
+git -C /mnt/Serveur/NetryxS6/source checkout 4df225cb355ac347b71cde09b172d53b5e47047d
 chown -R root:root /mnt/Serveur/NetryxS6/source
 ```
 

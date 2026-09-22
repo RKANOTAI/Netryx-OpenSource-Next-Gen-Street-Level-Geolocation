@@ -157,7 +157,7 @@ were the submitted Leboncoin source.
 
 This fork's interface is published at
 https://rkanotai.github.io/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation/.
-The verified API origin is `https://netryx-api.cecilebui.com`, configured in
+The API origin is `https://netryx-api.cecilebui.com` in the example configuration
 `frontend/js/runtime-config.js`. Open **Connexion** and enter the private access
 token to submit searches. A browser-specific API override can be cleared with
 **Réinitialiser**. For a separate deployment, change the public origin or use
@@ -188,9 +188,13 @@ Set a long random `NETRYX_API_TOKEN` **before** exposing the API publicly.
 It protects all `/api` routes, including polling and schema access. `/healthz`
 remains public and reports whether authentication is required. Set
 `NETRYX_CORS_ORIGINS=https://rkanotai.github.io`; CORS is not authentication.
-Enter the token through **Connexion**. It stays in JavaScript memory only, not
-localStorage, URLs, source code, or the Pages artifact. Anyone with this token
-can access this single-user instance; this is not a multi-tenant service.
+Enter the token through **Connexion**. For this private single-user deployment,
+the browser stores it in `localStorage`; it remains absent from URLs, source
+code, and the Pages artifact. The stored record is bound to the normalized API
+origin and is never reused after switching to another API origin. Every script
+running on the same GitHub Pages origin can still read it, so use only a personal
+browser and click **Effacer le jeton** before sharing the device. Anyone with
+this token can access this instance; this is not a multi-tenant service.
 
 Additional settings: `NETRYX_MAX_ACTIVE_JOBS` (default 4),
 `NETRYX_PHOTO_RESEARCH_TIMEOUT_S` (default 3600). Requests are bounded before
@@ -199,12 +203,9 @@ chunked bodies. Run a single API process, not multiple GPU-owning workers.
 
 ### NAS and Cloudflare Tunnel
 
-The chosen domain for this installation is **cecilebui.com**, not kanohub.xyz.
-The named tunnel **netryx-web** serves `https://netryx-api.cecilebui.com` through
-an outbound connection from this machine. Only this new subdomain was added;
-the main website and its existing DNS records were not changed. Public health,
-CORS preflight, rejection of unauthenticated requests, authenticated photo
-submission, and completed-job polling have been verified over HTTPS.
+A possible deployment uses the hostname `netryx-api.cecilebui.com` through a
+named Cloudflare Tunnel. Only configure DNS and tunnel ingress after completing
+the live health, CORS, authentication, submission, and job-polling checks below.
 
 Cloudflare Tunnel can connect out from the NAS to an API listening on
 `127.0.0.1:8000`, without opening router ports or exposing the NAS administration.
@@ -233,11 +234,68 @@ directory. The private API token is the `NETRYX_API_TOKEN` value in `api.env`;
 copy it locally into the site's **Connexion → Jeton d’accès** field. Do not
 paste it into chat, commit it, or share the environment file.
 
+The mutable application checkout is mapped from `/mnt/Serveur/Hermes` to
+`/opt/data`. Keep s6 definitions outside that writable tree. A TrueNAS root
+administrator must obtain the definitions from a separate root-owned GitHub
+checkout at `/mnt/Serveur/NetryxS6/source`, using the reviewed repository and
+commit:
+
+```bash
+git clone https://github.com/RKANOTAI/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation.git \
+  /mnt/Serveur/NetryxS6/source
+git -C /mnt/Serveur/NetryxS6/source checkout <reviewed-commit>
+chown -R root:root /mnt/Serveur/NetryxS6/source
+```
+
+Install the definitions from that checkout as root. The run file and service
+folders are 0755; the type, dependency, and bundle files are 0644:
+
+```bash
+install -d -o root -g root -m 0755 \
+  /mnt/Serveur/NetryxS6/s6-rc.d/netryx/dependencies.d \
+  /mnt/Serveur/NetryxS6/user-contents.d
+install -o root -g root -m 0755 \
+  /mnt/Serveur/NetryxS6/source/deploy/s6-overlay/s6-rc.d/netryx/run \
+  /mnt/Serveur/NetryxS6/s6-rc.d/netryx/run
+install -o root -g root -m 0644 \
+  /mnt/Serveur/NetryxS6/source/deploy/s6-overlay/s6-rc.d/netryx/type \
+  /mnt/Serveur/NetryxS6/s6-rc.d/netryx/type
+install -o root -g root -m 0644 \
+  /mnt/Serveur/NetryxS6/source/deploy/s6-overlay/s6-rc.d/netryx/dependencies.d/base \
+  /mnt/Serveur/NetryxS6/s6-rc.d/netryx/dependencies.d/base
+install -o root -g root -m 0644 \
+  /mnt/Serveur/NetryxS6/source/deploy/s6-overlay/user-contents.d/netryx \
+  /mnt/Serveur/NetryxS6/user-contents.d/netryx
+```
+
+In **Apps → Hermes → Edit → Additional Storage**, add exactly these read-only
+Host Path mounts before restarting the app:
+
+| Host source | Container destination | Mode |
+|---|---|---|
+| `/mnt/Serveur/NetryxS6/s6-rc.d/netryx` | `/etc/s6-overlay/s6-rc.d/netryx` | read-only |
+| `/mnt/Serveur/NetryxS6/user-contents.d/netryx` | `/etc/s6-overlay/s6-rc.d/user/contents.d/netryx` | read-only |
+
+Mount only the service directory and the individual bundle file above. Do not
+mount the whole `s6-rc.d` or `contents.d` directory, and do not substitute a
+file from `/mnt/Serveur/Hermes` or `/opt/data`. If the TrueNAS form refuses the
+individual bundle-file mount, stop rather than mounting its parent. s6 compiles
+these definitions during container startup, so restart the container after
+changing them.
+
+At startup s6 launches the root-owned `netryx/run` definition. Its only
+root-privileged action is executing the trusted root-owned
+`/command/s6-setuidgid hermes`. That immediately drops privileges; only then
+are the mutable `/opt/data` `supervisord` binary, supervisor configuration,
+environment file, repository scripts, logs, and tunnel configuration opened.
+The version-controlled run definition therefore invokes Supervisor directly as `hermes`
+with `HOME=/opt/data` and the `NETRYX_*` paths required by the repository.
+
 ```bash
 # API only, until the named tunnel has been authorized and configured:
 sh deploy/start.sh
 
-# Once /opt/data/services/netryx/tunnel.yml exists and has been verified:
+# Once /opt/data/services/netryx/tunnel.yml exists and is configured:
 NETRYX_TUNNEL_ENABLED=true sh deploy/start.sh
 ```
 
@@ -248,10 +306,9 @@ Run only one supervisor. To query it without exposing any secrets:
   -s unix:///opt/data/services/netryx/supervisor.sock status
 ```
 
-The NAS administrator should arrange for the chosen command to execute on
-container startup, with the existing GPU and persistent `/opt/data` mounts.
-Do not open router ports or forward Internet traffic to the NAS admin interface.
-These scripts supervise processes but do not modify the NAS startup settings.
+After restart, verify `s6-svstat /run/service/netryx`, Supervisor status, local
+`/healthz`, then the public HTTPS endpoint. Do not open router ports or forward
+Internet traffic to the NAS administration interface.
 
 1. Fork the upstream repository; do not push to `rushowr/...` directly.
 2. Set `frontend/js/runtime-config.js` `apiBase` to the deployed HTTPS API.

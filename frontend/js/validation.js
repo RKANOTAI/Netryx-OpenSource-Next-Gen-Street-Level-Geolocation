@@ -3,12 +3,24 @@ export const MAX_PHOTOS = 4;
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 function isPrivateHost(hostname) {
-  const host = hostname.toLowerCase().replace(/\.$/, "");
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (host === "localhost" || host.endsWith(".localhost")) return true;
-  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)) return true;
-  const match = host.match(/^172\.(\d+)\./);
-  if (match && Number(match[1]) >= 16 && Number(match[1]) <= 31) return true;
-  if (host === "::1" || host === "0.0.0.0" || host.startsWith("fe80:")) return true;
+  const ipv4 = host.split(".").map(Number);
+  if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const [first, second, third] = ipv4;
+    if (first === 0 || first === 10 || first === 127 || first >= 224) return true;
+    if (first === 100 && second >= 64 && second <= 127) return true;
+    if (first === 169 && second === 254) return true;
+    if (first === 172 && second >= 16 && second <= 31) return true;
+    if (first === 192 && (second === 0 || second === 168)) return true;
+    if (first === 198 && (second === 18 || second === 19 || (second === 51 && third === 100))) return true;
+    if (first === 203 && second === 0 && third === 113) return true;
+  }
+  if (host.includes(":")) {
+    if (["::", "::1"].includes(host) || host.startsWith("::ffff:")) return true;
+    if (/^f[cd]/.test(host) || /^fe[89ab]/.test(host) || host.startsWith("ff")) return true;
+    if (host === "2001:db8" || host.startsWith("2001:db8:")) return true;
+  }
   return false;
 }
 
@@ -39,7 +51,8 @@ function numberField(value, label, minimum, maximum) {
   if (value === null || value === undefined || String(value).trim() === "") {
     return { valid: false, message: `Saisissez la ${label}.` };
   }
-  const number = Number(value);
+  const normalized = typeof value === "string" ? value.trim().replace(",", ".") : value;
+  const number = Number(normalized);
   if (!Number.isFinite(number)) return { valid: false, message: `La ${label} doit être un nombre.` };
   if (number < minimum || number > maximum) {
     return { valid: false, message: `La ${label} doit être comprise entre ${minimum} et ${maximum}.` };

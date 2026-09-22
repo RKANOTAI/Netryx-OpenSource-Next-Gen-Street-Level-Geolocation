@@ -62,6 +62,23 @@ test("sonde la santé sans authentification et expose auth_required", async () =
   assert.deepEqual(health, { status: "ok", auth_required: true });
 });
 
+test("ne transmet pas les options internes à fetch", async () => {
+  let sentOptions;
+  await checkHealth("https://api.example", {
+    fetchImpl: async (_url, options) => {
+      sentOptions = options;
+      return new Response(JSON.stringify({ status: "ok", auth_required: false }), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+    timeoutMs: 1_000,
+  });
+
+  assert.equal(Object.hasOwn(sentOptions, "fetchImpl"), false);
+  assert.equal(Object.hasOwn(sentOptions, "timeoutMs"), false);
+  assert.equal(Object.hasOwn(sentOptions, "signal"), true);
+});
+
 test("arrête le polling après un état terminal", async () => {
   const statuses = ["queued", "running", "succeeded"];
   let calls = 0;

@@ -2,6 +2,7 @@ import { confidenceLabel, coordinatesLabel, PHASE_LABELS } from "./formatters.js
 
 const PHASES = [
   "queued",
+  "preparing_photo_manifest",
   "uploading",
   "validating",
   "fetching_listing",
@@ -10,6 +11,7 @@ const PHASES = [
   "extracting_candidates",
   "matching",
   "refining",
+  "checking_syndication",
   "complete",
 ];
 
@@ -178,6 +180,10 @@ export function createView(document) {
       elements.photoSubmit.textContent = busy ? "Analyse en cours…" : "Lancer l’analyse photo";
       elements.progressPanel.setAttribute("aria-busy", String(busy));
       renderPhotoPreviews(state.photos);
+      elements.latitude.value = state.region?.latitude ?? "";
+      elements.longitude.value = state.region?.longitude ?? "";
+      elements.radius.value = state.region?.radiusM ?? "";
+      elements.reviewedExterior.checked = Boolean(state.reviewedExterior);
 
       const invalid = state.phase === "invalid";
       const invalidField = state.error?.field;

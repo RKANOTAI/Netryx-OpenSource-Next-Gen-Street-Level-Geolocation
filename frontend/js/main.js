@@ -66,8 +66,9 @@ function apiOptions(controller) {
 function showConnectionSettings() {
   view.elements.connectionSettings.open = true;
   view.elements.settingsToggle.setAttribute("aria-expanded", "true");
-  view.elements.connectionSettings.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
   view.elements.apiOrigin.focus({ preventScroll: true });
+  const scroll = () => view.elements.connectionSettings.scrollIntoView?.({ behavior: "auto", block: "nearest" });
+  globalThis.setTimeout(scroll, 0);
 }
 
 function setApiStatus(kind, text) {
@@ -95,7 +96,7 @@ async function probeApi() {
     if (health.auth_required) {
       setApiStatus("online", "Authentification requise");
       view.elements.authHelp.hidden = false;
-      view.elements.authHelp.textContent = "Le moteur répond mais demande un jeton. Saisissez-le ci-dessous ; il restera uniquement en mémoire pendant cette session.";
+      view.elements.authHelp.textContent = "Le moteur répond mais demande un jeton. Il sera mémorisé dans ce navigateur et restera accessible aux scripts de cette origine.";
       view.elements.connectionSettings.open = true;
       view.elements.settingsToggle.setAttribute("aria-expanded", "true");
     } else {
@@ -212,10 +213,12 @@ for (const button of document.querySelectorAll(".retry-button")) {
 }
 
 view.elements.settingsToggle.addEventListener("click", () => {
-  const open = !view.elements.connectionSettings.open;
-  view.elements.connectionSettings.open = open;
-  view.elements.settingsToggle.setAttribute("aria-expanded", String(open));
-  if (open) view.elements.apiOrigin.focus({ preventScroll: true });
+  if (view.elements.connectionSettings.open) {
+    view.elements.connectionSettings.open = false;
+    view.elements.settingsToggle.setAttribute("aria-expanded", "false");
+  } else {
+    showConnectionSettings();
+  }
 });
 view.elements.connectionSettings.addEventListener("toggle", () => {
   view.elements.settingsToggle.setAttribute("aria-expanded", String(view.elements.connectionSettings.open));
@@ -245,16 +248,19 @@ view.elements.clearApiOverride.addEventListener("click", () => {
 view.elements.saveToken.addEventListener("click", () => {
   setSessionApiToken(view.elements.apiToken.value);
   view.elements.apiToken.value = "";
-  view.elements.connectionFeedback.textContent = "Jeton utilisé pour cette session uniquement.";
+  view.elements.connectionFeedback.textContent = "Jeton mémorisé dans ce navigateur.";
   probeApi();
 });
 view.elements.clearToken.addEventListener("click", () => {
   clearSessionApiToken();
   view.elements.apiToken.value = "";
-  view.elements.connectionFeedback.textContent = "Jeton effacé de la session.";
+  view.elements.connectionFeedback.textContent = "Jeton effacé de ce navigateur.";
 });
 
 view.elements.apiOrigin.value = getApiBase();
+if (getSessionApiToken()) {
+  view.elements.connectionFeedback.textContent = "Jeton mémorisé chargé pour ce navigateur.";
+}
 view.render(state);
 probeApi();
 window.addEventListener("beforeunload", () => {

@@ -24,6 +24,20 @@ test("conserve et retire une photo sélectionnée par son identifiant", () => {
   assert.deepEqual(next.photos.map((photo) => photo.id), ["two"]);
 });
 
+test("retirer une photo annule la revue extérieure et l’erreur de sélection", () => {
+  const current = {
+    ...initialState,
+    photos: [{ id: "one" }, { id: "two" }],
+    reviewedExterior: true,
+    photoSelectionError: "ancienne erreur",
+  };
+  const next = reduce(current, { type: "PHOTO_REMOVE", id: "one" });
+
+  assert.deepEqual(next.photos.map((photo) => photo.id), ["two"]);
+  assert.equal(next.reviewedExterior, false);
+  assert.equal(next.photoSelectionError, null);
+});
+
 test("ignore la réponse tardive d'un ancien job ou d'une ancienne exécution", () => {
   const current = { ...initialState, phase: "running", jobId: "new", runId: 4 };
   const oldJob = reduce(current, {

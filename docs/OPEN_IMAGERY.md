@@ -39,11 +39,11 @@ Utiliser un répertoire distinct par recherche. Le chemin de chaque image doit
 être local ; aucune photo n’est envoyée à un fournisseur de modèle. Les requêtes
 Panoramax transmettent la zone géographique recherchée, pas la photo requête.
 
-Le serveur d’annonces continue de fonctionner avec son manifest automatique.
-La sélection manuelle est proposée dans cette commande locale, **pas encore dans
-l’interface web**. Une annonce dont les photos sont toutes rejetées nécessite
-encore cette revue ; le remplacement du classificateur ImageNet par un modèle
-indoor/outdoor calibré reste à faire.
+Le formulaire web **Photos** et la commande locale permettent une revue manuelle
+explicite des extérieurs. Le flux web **URL d’annonce** reste automatique : si
+toutes les photos récupérées sont rejetées, il faut relancer la recherche via le
+formulaire Photos avec des fichiers vérifiés, ou remplacer le filtre ImageNet
+provisoire par un modèle indoor/outdoor calibré.
 
 ## Réglages
 

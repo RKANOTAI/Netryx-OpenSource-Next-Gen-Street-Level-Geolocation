@@ -22,6 +22,19 @@ test("rejette les URL vides, locales, avec identifiants ou protocole dangereux",
   }
 });
 
+test("rejette les adresses littérales non publiques dans les URL d’annonce", () => {
+  for (const value of [
+    "http://169.254.169.254/latest/meta-data",
+    "http://100.64.0.1/listing",
+    "http://[fd00::1]/listing",
+    "http://[fe80::1]/listing",
+    "http://[::ffff:127.0.0.1]/listing",
+    "http://[2001:db8::1]/listing",
+  ]) {
+    assert.equal(validateListingUrl(value).valid, false, value);
+  }
+});
+
 function image(name, type = "image/jpeg", size = 1024) {
   return { name, type, size };
 }
@@ -59,6 +72,21 @@ test("valide la recherche photo et conserve ses bornes contractuelles", () => {
   });
 });
 
+test("accepte les coordonnées saisies avec une virgule décimale", () => {
+  const result = validatePhotoSubmission({
+    photos: [image("facade.jpg")],
+    latitude: "48,8566",
+    longitude: "2,3522",
+    radiusM: "300",
+    reviewedExterior: true,
+    imageSize: "hd",
+  });
+
+  assert.equal(result.valid, true);
+  assert.equal(result.value.latitude, 48.8566);
+  assert.equal(result.value.longitude, 2.3522);
+});
+
 test("refuse les fichiers non image, trop lourds et une revue extérieure non confirmée", () => {
   for (const input of [
     { photos: [], reviewedExterior: true },
@@ -82,4 +110,11 @@ test("n’autorise que les origines API publiques HTTPS ou les hôtes locaux", (
   assert.equal(validateApiOrigin("https://api.example.test/path").valid, false);
   assert.equal(validateApiOrigin("http://localhost:8000").valid, true);
   assert.equal(validateApiOrigin("http://api.example.test").valid, false);
+});
+
+test("autorise une API HTTP sur la boucle locale IPv6", () => {
+  assert.deepEqual(validateApiOrigin("http://[::1]:8000"), {
+    valid: true,
+    value: "http://[::1]:8000",
+  });
 });

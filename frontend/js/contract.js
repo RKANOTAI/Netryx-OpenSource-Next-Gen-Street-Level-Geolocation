@@ -2,6 +2,16 @@ import { safeMapsUrl, validCoordinates } from "./formatters.js";
 
 const STATUSES = new Set(["queued", "running", "succeeded", "not_found", "failed", "blocked"]);
 const CONFIDENCE = new Set(["HIGH", "MEDIUM", "LOW", "NONE"]);
+const PANORAMAX_HOSTS = new Set([
+  "api.panoramax.xyz",
+  "panoramax.ign.fr",
+  "panoramax.openstreetmap.fr",
+]);
+
+function hasExplicitPort(candidate) {
+  const authority = String(candidate).match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1] ?? "";
+  return authority.slice(authority.lastIndexOf("@") + 1).includes(":");
+}
 
 function object(value, name) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${name} invalide`);
@@ -28,7 +38,15 @@ function normalizeProgress(value) {
 function safePanoramaxUrl(candidate) {
   try {
     const url = new URL(candidate);
-    if (url.protocol !== "https:" || !url.hostname.toLowerCase().includes("panoramax")) return null;
+    const hostname = url.hostname.toLowerCase();
+    if (
+      url.protocol !== "https:"
+      || url.username
+      || url.password
+      || url.port
+      || hasExplicitPort(candidate)
+      || !PANORAMAX_HOSTS.has(hostname)
+    ) return null;
     return url.href;
   } catch {
     return null;
@@ -39,10 +57,26 @@ function normalizeSources(result) {
   const raw = Array.isArray(result.sources)
     ? result.sources
     : Array.isArray(result.panoramax_sources) ? result.panoramax_sources : [];
+  const seen = new Set();
   return raw.flatMap((entry) => {
-    const url = typeof entry === "string" ? entry : entry?.url;
+    const url = typeof entry === "string" ? entry : entry?.source_url ?? entry?.url;
     const safeUrl = safePanoramaxUrl(url);
-    return safeUrl ? [{ label_fr: typeof entry?.label_fr === "string" ? entry.label_fr : "Source Panoramax", url: safeUrl }] : [];
+    if (!safeUrl || seen.has(safeUrl)) return [];
+    seen.add(safeUrl);
+    const source = {
+      label_fr: typeof entry?.label_fr === "string" ? entry.label_fr : "Source Panoramax",
+      url: safeUrl,
+    };
+    if (entry && typeof entry === "object") {
+      if (entry.provider === "panoramax") source.provider = "panoramax";
+      if (typeof entry.source_url === "string") source.source_url = safeUrl;
+      if (typeof entry.license === "string" && entry.license.trim()) source.license = entry.license.trim();
+      const attribution = Array.isArray(entry.attribution)
+        ? entry.attribution.filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim())
+        : [];
+      if (attribution.length) source.attribution = attribution;
+    }
+    return [source];
   });
 }
 
@@ -69,6 +103,7 @@ function normalizeResult(value) {
       unit: entry.unit ?? null,
     };
   });
+  const sources = normalizeSources(result);
   return {
     summary_fr: typeof result.summary_fr === "string" ? result.summary_fr : "",
     location: {
@@ -79,8 +114,8 @@ function normalizeResult(value) {
     confidence: { level, score: confidence.score ?? null },
     evidence,
     google_maps_url: safeMapsUrl(result.google_maps_url, latitude, longitude),
-    panoramax_url: safePanoramaxUrl(result.panoramax_url),
-    sources: normalizeSources(result),
+    panoramax_url: safePanoramaxUrl(result.panoramax_url) ?? sources[0]?.url ?? null,
+    sources,
   };
 }
 

@@ -129,12 +129,13 @@
         </form>
         <div class="token-block">
           <label class="field-label" for="api-token">Jeton d’accès (optionnel)
-            <input id="api-token" name="apiToken" type="password" autocomplete="new-password" placeholder="Saisi manuellement, non mémorisé">
+            <input id="api-token" name="apiToken" type="password" autocomplete="new-password" placeholder="Mémorisé uniquement dans ce navigateur">
           </label>
           <div class="settings-actions">
-            <button id="save-token" class="secondary-button" type="button">Utiliser pour cette session</button>
+            <button id="save-token" class="secondary-button" type="button">Mémoriser sur cet appareil</button>
             <button id="clear-token" class="text-button" type="button">Effacer le jeton</button>
           </div>
+          <p class="settings-help">Ne mémorisez pas le jeton sur un appareil partagé. Il est accessible aux scripts exécutés sur cette origine GitHub Pages.</p>
           <p id="auth-help" class="settings-help" hidden></p>
           <p id="connection-feedback" class="settings-feedback" role="status" aria-live="polite"></p>
         </div>

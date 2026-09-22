@@ -29,7 +29,12 @@ export function reduce(state, action) {
         reviewedExterior: false,
       };
     case "PHOTO_REMOVE":
-      return { ...state, photos: state.photos.filter((photo) => photo.id !== action.id) };
+      return {
+        ...state,
+        photos: state.photos.filter((photo) => photo.id !== action.id),
+        photoSelectionError: null,
+        reviewedExterior: false,
+      };
     case "SET_REGION":
       return { ...state, region: { ...state.region, ...action.region } };
     case "SET_REVIEWED_EXTERIOR":

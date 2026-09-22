@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+exec /command/s6-setuidgid hermes /usr/bin/env \
+  HOME=/opt/data \
+  NETRYX_ROOT=/opt/data/workspace/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation \
+  NETRYX_DEPLOY_DIR=/opt/data/services/netryx \
+  NETRYX_ENV_FILE=/opt/data/services/netryx/api.env \
+  NETRYX_CLOUDFLARED=/opt/data/bin/cloudflared \
+  NETRYX_TUNNEL_ENABLED=true \
+  /opt/data/services/netryx/supervisor-venv/bin/supervisord \
+  -n -c /opt/data/workspace/Netryx-OpenSource-Next-Gen-Street-Level-Geolocation/deploy/supervisord.conf

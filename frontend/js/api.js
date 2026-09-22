@@ -55,8 +55,9 @@ async function jsonResponse(response) {
 async function fetchJson(url, options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const context = requestContext(options.signal, options.timeoutMs);
+  const { fetchImpl: _fetchImpl, timeoutMs: _timeoutMs, signal: _signal, ...requestOptions } = options;
   try {
-    return await fetchImpl(url, { ...options, signal: context.signal, fetchImpl: undefined, timeoutMs: undefined });
+    return await fetchImpl(url, { ...requestOptions, signal: context.signal });
   } finally {
     context.cleanup();
   }
